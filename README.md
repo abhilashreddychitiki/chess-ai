@@ -6,12 +6,12 @@ A production-ready chess AI training system using Reinforcement Learning (RL) an
 
 - [Features](#features)
 - [Setup](#setup)
+- [Prerequisites](#prerequisites)
 - [Usage](#usage)
 - [Testing](#testing)
 - [Monitoring](#monitoring)
 - [Configuration](#configuration)
 - [Contributing](#contributing)
-- [License](#license)
 
 ## Features
 
@@ -23,33 +23,67 @@ A production-ready chess AI training system using Reinforcement Learning (RL) an
 - **Comprehensive Logging**: Logs training progress and system events for monitoring and debugging.
 - **Modular Structure**: Organized codebase for ease of maintenance and scalability.
 
+## Prerequisites
+
+- Python 3.8 or higher
+- CUDA-compatible GPU (recommended for training)
+- Stockfish chess engine
+- Opening book database
+
 ## Setup
 
 1. **Clone the Repository**
+
    ```bash
-   git clone https://github.com/yourusername/chess-ai-project.git
+   git clone https://github.com/abhilashreddychitiki/chess-ai.git
    cd chess-ai-project
    ```
+
 2. **Create a Virtual Environment**
+
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
+
 3. **Install Dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
+
 4. **Configure Environment Variables**
 
    - Copy `.env.example` to `.env`:
      ```bash
      cp .env.example .env
      ```
-   - Fill in the required settings in the `.env` file, such as `STOCKFISH_PATH` and `MODEL_PATH`.
+   - Fill in the required settings in the `.env` file.
 
 5. **Setup Stockfish**
+
    - Download and install Stockfish from [Stockfish Official Site](https://stockfishchess.org/download/).
    - Update the `STOCKFISH_PATH` in `.env` with the path to the Stockfish executable.
+
+6. **Setup Opening Book**
+   - Download the Perfect2023.bin opening book from [Computer Chess Download Page](https://sites.google.com/site/computerschess/download)
+   - Place the opening book file in `data/books/Perfect2023.bin`
+   - Ensure the path matches the configuration in `src/chess_ai/config.py`
+
+## Directory Structure
+
+```
+chess-ai-project/
+├── data/
+│   ├── books/          # Opening book files
+│   ├── logs/           # Training and game logs
+│   ├── models/         # Saved model checkpoints
+│   └── tablebases/     # Endgame tablebases
+├── src/
+│   └── chess_ai/       # Core AI implementation
+├── tests/              # Test suite
+└── utils/              # Utility functions
+```
 
 ## Usage
 
@@ -63,7 +97,11 @@ python train_ai.py
 
 ### Play Against the AI
 
-_(Ensure you have implemented the `play.py` script as needed.)_
+Launch the graphical interface:
+
+```bash
+python -m tests.test_game
+```
 
 ## Testing
 
@@ -80,6 +118,7 @@ pytest tests/
 - **Board Evaluation**: `tests/test_evaluation.py`
 - **Stockfish Integration**: `tests/test_stockfish.py`
 - **Move Comparison**: `tests/compare_moves.py`
+- **AI Speed**: `tests/test_ai_speed.py`
 
 ## Monitoring
 
@@ -94,20 +133,20 @@ All settings can be configured via environment variables or the `.env` file. Ref
 
 - **Environment**
 
-  - `ENVIRONMENT`: Set to `development` or `production`.
+  - `ENVIRONMENT`: Set to `development` or `production`
 
 - **Paths**
 
-  - `STOCKFISH_PATH`: Path to the Stockfish executable.
-  - `MODEL_PATH`: Directory to save trained models.
+  - `STOCKFISH_PATH`: Path to the Stockfish executable
+  - `MODEL_PATH`: Directory to save trained models
 
 - **AI Settings**
-  - `MCTS_EXPLORATION_CONSTANT`
-  - `MCTS_MAX_ITERATIONS`
-  - `MCTS_MAX_DEPTH`
-  - `RL_LEARNING_RATE`
-  - `RL_BATCH_SIZE`
-  - `RL_NUM_EPOCHS`
+  - `MCTS_EXPLORATION_CONSTANT`: Controls exploration vs exploitation in MCTS
+  - `MCTS_MAX_ITERATIONS`: Maximum number of MCTS iterations
+  - `MCTS_MAX_DEPTH`: Maximum depth for MCTS search
+  - `RL_LEARNING_RATE`: Learning rate for neural network training
+  - `RL_BATCH_SIZE`: Batch size for training
+  - `RL_NUM_EPOCHS`: Number of training epochs
 
 ## Contributing
 
