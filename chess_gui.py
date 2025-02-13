@@ -38,7 +38,7 @@ class ChessGUI:
         # Choose color before initializing board
         self.player_color = self.choose_player_color()
         if self.player_color is None:
-            self.player_color = chess.WHITE  # Default to white if dialog is closed
+            self.player_color = chess.WHITE
         
         self.board = chess.Board()
         self.ai = ModernChessAI(use_mcts=True, use_rl=True)
@@ -52,9 +52,9 @@ class ChessGUI:
         # Create GUI layout
         self.create_gui()
         
-        # If AI plays white, make first move
-        if self.player_color == chess.BLACK:
-            self.schedule_ai_move()
+        # Schedule AI's first move if AI is white
+        if not self.player_color:  # If player chose black (False)
+            self.root.after(100, self.schedule_ai_move)
         
         self.update_display()
         
@@ -136,6 +136,10 @@ class ChessGUI:
     
     def square_clicked(self, row, col):
         """Handles mouse clicks on the chess board"""
+        # Prevent moves if it's not player's turn
+        if self.board.turn != self.player_color:
+            return
+        
         square = chess.square(col, 7-row)
         
         # Reset previous selection if it exists
@@ -297,6 +301,11 @@ class ChessGUI:
     
     def make_move_from_text(self):
         """Processes moves entered via text input"""
+        # Prevent moves if it's not player's turn
+        if self.board.turn != self.player_color:
+            messagebox.showerror("Error", "Not your turn!")
+            return
+        
         move_uci = self.move_entry.get().strip()
         try:
             move = chess.Move.from_uci(move_uci)
@@ -321,19 +330,24 @@ class ChessGUI:
         dialog.transient(self.root)
         dialog.grab_set()
         
-        color = [None]  # Use list to store color choice
+        color = [chess.WHITE]  # Default to white
         
         def set_color(is_white):
             color[0] = chess.WHITE if is_white else chess.BLACK
             dialog.destroy()
         
-        tk.Button(dialog, text="White", 
-                 command=lambda: set_color(True)).pack(side=tk.LEFT, padx=10)
-        tk.Button(dialog, text="Black", 
-                 command=lambda: set_color(False)).pack(side=tk.RIGHT, padx=10)
+        # Center the buttons
+        frame = tk.Frame(dialog)
+        frame.pack(padx=20, pady=20)
         
+        tk.Button(frame, text="White", width=10,
+                 command=lambda: set_color(True)).pack(side=tk.LEFT, padx=10)
+        tk.Button(frame, text="Black", width=10,
+                 command=lambda: set_color(False)).pack(side=tk.LEFT, padx=10)
+        
+        # Wait for dialog
         self.root.wait_window(dialog)
-        return color[0] or chess.WHITE  # Default to white if dialog is closed
+        return color[0]
 
 def main():
     # Create necessary directories
