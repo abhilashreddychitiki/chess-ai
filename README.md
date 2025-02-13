@@ -95,13 +95,40 @@ Run the training pipeline:
 python train_ai.py
 ```
 
-### Play Against the AI
+### Playing Chess
 
-Launch the graphical interface:
+You have two options to play against the AI:
+
+#### 1. Graphical Interface (Recommended)
+
+Launch the GUI version with:
 
 ```bash
-python -m tests.test_game
+python chess_gui.py
 ```
+
+Features:
+
+- Click-to-move interface
+- Visual board representation
+- Move history display
+- Game status updates
+- Color selection at game start
+
+#### 2. Command Line Interface
+
+Launch the CLI version with:
+
+```bash
+python play.py
+```
+
+Features:
+
+- Text-based board display
+- Move input using algebraic notation (e.g., "e2e4")
+- Move history logging
+- Simple and lightweight
 
 ## Testing
 

@@ -57,39 +57,14 @@ class ModernChessAI:
         )
         self.tablebase = TablebaseManager(path=Config.PATHS['tablebase'])
     
-    def get_best_move(self, board, time_limit=None):
-        """Get best move using all available methods"""
-        try:
-            # First check tablebase
-            tb_move = self.tablebase.get_best_move(board)
-            if tb_move:
-                return tb_move
-            
-            # Then try opening book
-            book_move = get_opening_move(board)
-            if book_move:
-                return book_move
-        except Exception as e:
-            logger.warning(f"Error accessing tablebase or opening book: {str(e)}")
+    def get_best_move(self, board, time_limit=1.0):
+        """Get the best move for the current position"""
+        # Reduce iterations to make moves faster (100 iterations per second instead of 1000)
+        iterations = int(time_limit * 100)
         
-        # Calculate time for this move
-        if time_limit is None:
-            time_limit = self.time_manager.get_time_for_move(board)
-            
-        # Use MCTS with the calculated time limit
-        if self.use_mcts:
-            mcts = MCTS(board, time_limit=time_limit)
-            return mcts.get_best_move()
-            
-        # Fallback to RL policy
-        if self.use_rl:
-            probabilities = self.rl_trainer.get_move_probabilities(board)
-            legal_moves = list(board.legal_moves)
-            best_move = max(legal_moves, 
-                          key=lambda m: probabilities[m.from_square * 64 + m.to_square])
-            return best_move
-            
-        return random.choice(list(board.legal_moves))
+        # Initialize MCTS with max_iterations
+        mcts = MCTS(board, max_iterations=iterations)
+        return mcts.get_best_move()
     
     def train(self, positions, moves, values=None):
         """Train the AI on a set of positions"""

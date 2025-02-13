@@ -9,6 +9,8 @@ import chess
 from PIL import Image, ImageTk
 from src.chess_ai.chess_ai import ModernChessAI
 from src.chess_ai.config import Config
+import threading
+import queue
 
 class ChessGUI:
     """
@@ -20,6 +22,8 @@ class ChessGUI:
         ai (ModernChessAI): The AI opponent
         selected_square (int): Currently selected square on the board
         player_color (bool): Color of the human player (True for white)
+        ai_move_queue (queue.Queue): Queue for AI move calculations
+        is_ai_thinking (bool): Indicates if AI is currently thinking
     """
     def __init__(self, root):
         self.root = root
@@ -71,6 +75,10 @@ class ChessGUI:
             self.make_ai_move()
         
         self.update_display()
+        
+        # Add these lines after other initializations
+        self.ai_move_queue = queue.Queue()
+        self.is_ai_thinking = False
         
     def create_board_buttons(self):
         """Creates the 8x8 grid of buttons representing the chess board"""
@@ -145,19 +153,86 @@ class ChessGUI:
                         (end_square <= 7 and not piece.color)))  # Black pawn reaching 1st rank
         
         if is_promotion:
-            # Create promotion dialog
             promotion_piece = self.show_promotion_dialog()
             move = chess.Move(start_square, end_square, promotion=promotion_piece)
         else:
             move = chess.Move(start_square, end_square)
 
         if move in self.board.legal_moves:
+            # Make player's move
             self.board.push(move)
             self.update_display()
             self.history_text.insert(tk.END, f"{len(self.board.move_stack)}. {move.uci()}\n")
             
-            if not self.board.is_game_over():
-                self.make_ai_move()
+            # Check if game is over after player's move
+            if self.board.is_game_over():
+                self.show_game_over_message()
+                return
+            
+            # Schedule AI move after a short delay
+            self.root.after(100, self.schedule_ai_move)
+
+    def schedule_ai_move(self):
+        """Schedule the AI move calculation"""
+        self.disable_board()
+        self.status_label.config(text="AI is thinking...")
+        self.is_ai_thinking = True
+        
+        # Start AI calculation in a separate thread
+        ai_thread = threading.Thread(target=self._calculate_ai_move)
+        ai_thread.daemon = True
+        ai_thread.start()
+        
+        # Check for AI move completion periodically
+        self.root.after(100, self._check_ai_move)
+    
+    def _calculate_ai_move(self):
+        """Calculate AI move in a separate thread"""
+        try:
+            # Update status more frequently
+            self.root.after(0, lambda: self.status_label.config(text="AI is thinking..."))
+            ai_move = self.ai.get_best_move(self.board, time_limit=0.5)  # Reduced time limit
+            self.ai_move_queue.put(ai_move)
+        except Exception as e:
+            self.ai_move_queue.put(None)
+            print(f"AI move calculation error: {e}")
+            self.root.after(0, lambda: self.status_label.config(text="Error in AI calculation"))
+    
+    def _check_ai_move(self):
+        """Check if AI move calculation is complete"""
+        try:
+            # Try to get the AI move without blocking
+            ai_move = self.ai_move_queue.get_nowait()
+            
+            # AI move received, process it
+            if ai_move:
+                self.board.push(ai_move)
+                self.update_display()
+                self.history_text.insert(tk.END, f"{len(self.board.move_stack)}. {ai_move.uci()}\n")
+                
+                if self.board.is_game_over():
+                    self.show_game_over_message()
+            
+            # Re-enable the board
+            self.enable_board()
+            self.is_ai_thinking = False
+            
+        except queue.Empty:
+            # AI still thinking, check again after 100ms
+            if self.is_ai_thinking:
+                self.root.after(100, self._check_ai_move)
+
+    def disable_board(self):
+        """Disable board interaction"""
+        for row in self.buttons:
+            for button in row:
+                button.config(state=tk.DISABLED)
+
+    def enable_board(self):
+        """Enable board interaction"""
+        for row in self.buttons:
+            for button in row:
+                button.config(state=tk.NORMAL)
     
     def show_promotion_dialog(self):
         """Shows a dialog for selecting promotion piece"""
@@ -185,6 +260,24 @@ class ChessGUI:
         piece_type = pieces[selected_piece.get()]
         dialog.destroy()
         return piece_type
+    
+    def show_game_over_message(self):
+        """Shows game over message with the result"""
+        if self.board.is_checkmate():
+            winner = "Black" if self.board.turn == chess.WHITE else "White"
+            message = f"Checkmate! {winner} wins!"
+        elif self.board.is_stalemate():
+            message = "Game Over - Stalemate!"
+        elif self.board.is_insufficient_material():
+            message = "Game Over - Draw by insufficient material!"
+        elif self.board.is_fifty_moves():
+            message = "Game Over - Draw by fifty-move rule!"
+        elif self.board.is_repetition():
+            message = "Game Over - Draw by repetition!"
+        else:
+            message = "Game Over!"
+        
+        messagebox.showinfo("Game Over", message)
     
     def make_player_move(self):
         """Processes moves entered via text input"""
