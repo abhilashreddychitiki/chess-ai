@@ -12,6 +12,11 @@ from src.chess_ai.config import Config
 import threading
 import queue
 
+PIECE_SYMBOLS = {
+    'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔',  # White pieces
+    'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚'   # Black pieces
+}
+
 class ChessGUI:
     """
     A graphical user interface for the chess game.
@@ -24,72 +29,73 @@ class ChessGUI:
         player_color (bool): Color of the human player (True for white)
         ai_move_queue (queue.Queue): Queue for AI move calculations
         is_ai_thinking (bool): Indicates if AI is currently thinking
+        last_ai_move (chess.Move): Store the last AI move
     """
     def __init__(self, root):
         self.root = root
         self.root.title("Chess Game")
+        
+        # Choose color before initializing board
+        self.player_color = self.choose_player_color()
+        if self.player_color is None:
+            self.player_color = chess.WHITE  # Default to white if dialog is closed
+        
         self.board = chess.Board()
         self.ai = ModernChessAI(use_mcts=True, use_rl=True)
         
-        # Initialize GUI components
-        self.main_frame = tk.Frame(self.root)
-        self.main_frame.pack(padx=10, pady=10)
-        
-        # Create chess board display
-        self.board_frame = tk.Frame(self.main_frame)
-        self.board_frame.pack(side=tk.LEFT)
-        self.buttons = [[None for _ in range(8)] for _ in range(8)]
-        self.create_board_buttons()
-        
-        # Create side panel with controls
-        self.side_panel = tk.Frame(self.main_frame)
-        self.side_panel.pack(side=tk.LEFT, padx=20)
-        
-        # Move input controls
-        self.move_label = tk.Label(self.side_panel, text="Enter move (e.g., e2e4):")
-        self.move_label.pack()
-        self.move_entry = tk.Entry(self.side_panel)
-        self.move_entry.pack()
-        self.make_move_button = tk.Button(self.side_panel, text="Make Move", command=self.make_player_move)
-        self.make_move_button.pack(pady=5)
-        
-        # Game controls
-        self.new_game_button = tk.Button(self.side_panel, text="New Game", command=self.new_game)
-        self.new_game_button.pack(pady=5)
-        
-        # Status and history display
-        self.status_label = tk.Label(self.side_panel, text="White to move", wraplength=150)
-        self.status_label.pack(pady=10)
-        self.history_label = tk.Label(self.side_panel, text="Move History:")
-        self.history_label.pack()
-        self.history_text = tk.Text(self.side_panel, height=10, width=20)
-        self.history_text.pack()
-        
-        # Game state initialization
+        # Initialize state variables
         self.selected_square = None
-        self.player_color = self.choose_player_color()
-        self.ai_color = chess.WHITE if self.player_color == chess.BLACK else chess.BLACK
+        self.ai_move_queue = queue.Queue()
+        self.is_ai_thinking = False
+        self.last_ai_move = None
         
-        # Start game with AI move if AI is white
-        if self.ai_color == chess.WHITE:
-            self.make_ai_move()
+        # Create GUI layout
+        self.create_gui()
+        
+        # If AI plays white, make first move
+        if self.player_color == chess.BLACK:
+            self.schedule_ai_move()
         
         self.update_display()
         
-        # Add these lines after other initializations
-        self.ai_move_queue = queue.Queue()
-        self.is_ai_thinking = False
+    def create_gui(self):
+        """Create the main GUI layout"""
+        self.main_frame = tk.Frame(self.root)
+        self.main_frame.pack(padx=10, pady=10)
         
-    def create_board_buttons(self):
-        """Creates the 8x8 grid of buttons representing the chess board"""
+        # Create board
+        self.buttons = []
         for row in range(8):
+            button_row = []
             for col in range(8):
-                color = "white" if (row + col) % 2 == 0 else "gray"
-                button = tk.Button(self.board_frame, width=5, height=2, bg=color)
+                button = tk.Button(self.main_frame, width=4, height=2,
+                                 command=lambda r=row, c=col: self.square_clicked(r, c))
                 button.grid(row=row, column=col)
-                button.bind('<Button-1>', lambda e, r=row, c=col: self.square_clicked(r, c))
-                self.buttons[row][col] = button
-    
+                button_row.append(button)
+            self.buttons.append(button_row)
+        
+        # Create side panel
+        self.side_panel = tk.Frame(self.root)
+        self.side_panel.pack(side=tk.RIGHT, padx=10)
+        
+        # Move entry
+        self.move_entry = tk.Entry(self.side_panel)
+        self.move_entry.pack()
+        
+        # Buttons
+        tk.Button(self.side_panel, text="Make Move", 
+                 command=self.make_move_from_text).pack()
+        tk.Button(self.side_panel, text="New Game", 
+                 command=self.new_game).pack()
+        
+        # Status label
+        self.status_label = tk.Label(self.side_panel, text="White to move")
+        self.status_label.pack()
+        
+        # Move history
+        self.history_text = tk.Text(self.side_panel, height=10, width=20)
+        self.history_text.pack()
+        
     def update_display(self):
         """Updates the visual representation of the board and game status"""
         # Update board squares
@@ -98,7 +104,16 @@ class ChessGUI:
                 square = chess.square(col, 7-row)
                 piece = self.board.piece_at(square)
                 text = self.get_piece_symbol(piece) if piece else ""
-                self.buttons[row][col].config(text=text)
+                
+                # Determine square color
+                base_color = "white" if (row + col) % 2 == 0 else "gray"
+                
+                # Highlight last AI move if exists
+                if self.last_ai_move and (square == self.last_ai_move.from_square or 
+                                        square == self.last_ai_move.to_square):
+                    self.buttons[row][col].config(text=text, bg='light blue')
+                else:
+                    self.buttons[row][col].config(text=text, bg=base_color)
         
         # Update game status
         status = "White" if self.board.turn else "Black"
@@ -117,30 +132,31 @@ class ChessGUI:
         """Converts chess piece to Unicode symbol"""
         if piece is None:
             return ""
-        symbols = {
-            'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔',
-            'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚'
-        }
-        return symbols[piece.symbol()]
+        return PIECE_SYMBOLS[piece.symbol()]
     
     def square_clicked(self, row, col):
         """Handles mouse clicks on the chess board"""
         square = chess.square(col, 7-row)
+        
+        # Reset previous selection if it exists
+        if self.selected_square is not None:
+            old_row = 7 - chess.square_rank(self.selected_square)
+            old_col = chess.square_file(self.selected_square)
+            old_color = "white" if (old_row + old_col) % 2 == 0 else "gray"
+            self.buttons[old_row][old_col].config(bg=old_color)
+        
+        # If no square is selected, select this one if it has a piece
         if self.selected_square is None:
-            if self.board.piece_at(square):
+            piece = self.board.piece_at(square)
+            if piece and piece.color == self.board.turn:
                 self.selected_square = square
                 self.buttons[row][col].config(bg='yellow')
+        # If a square was already selected, try to make a move
         else:
             try:
                 self.handle_move(self.selected_square, square)
             except ValueError:
                 pass
-            
-            # Reset selection
-            old_row = 7 - chess.square_rank(self.selected_square)
-            old_col = chess.square_file(self.selected_square)
-            old_color = "white" if (old_row + old_col) % 2 == 0 else "gray"
-            self.buttons[old_row][old_col].config(bg=old_color)
             self.selected_square = None
     
     def handle_move(self, start_square, end_square):
@@ -159,7 +175,8 @@ class ChessGUI:
             move = chess.Move(start_square, end_square)
 
         if move in self.board.legal_moves:
-            # Make player's move
+            # After making a player's move, clear the last AI move highlight
+            self.last_ai_move = None  # Clear AI move highlight when player moves
             self.board.push(move)
             self.update_display()
             self.history_text.insert(tk.END, f"{len(self.board.move_stack)}. {move.uci()}\n")
@@ -189,36 +206,30 @@ class ChessGUI:
     def _calculate_ai_move(self):
         """Calculate AI move in a separate thread"""
         try:
-            # Update status more frequently
-            self.root.after(0, lambda: self.status_label.config(text="AI is thinking..."))
-            ai_move = self.ai.get_best_move(self.board, time_limit=0.5)  # Reduced time limit
+            ai_move = self.ai.get_best_move(self.board, time_limit=0.5)
             self.ai_move_queue.put(ai_move)
         except Exception as e:
             self.ai_move_queue.put(None)
             print(f"AI move calculation error: {e}")
-            self.root.after(0, lambda: self.status_label.config(text="Error in AI calculation"))
     
     def _check_ai_move(self):
         """Check if AI move calculation is complete"""
         try:
-            # Try to get the AI move without blocking
             ai_move = self.ai_move_queue.get_nowait()
             
-            # AI move received, process it
             if ai_move:
                 self.board.push(ai_move)
+                self.last_ai_move = ai_move  # Store the last AI move
                 self.update_display()
                 self.history_text.insert(tk.END, f"{len(self.board.move_stack)}. {ai_move.uci()}\n")
                 
                 if self.board.is_game_over():
                     self.show_game_over_message()
             
-            # Re-enable the board
             self.enable_board()
             self.is_ai_thinking = False
             
         except queue.Empty:
-            # AI still thinking, check again after 100ms
             if self.is_ai_thinking:
                 self.root.after(100, self._check_ai_move)
 
@@ -245,21 +256,26 @@ class ChessGUI:
         
         dialog = tk.Toplevel()
         dialog.title("Choose promotion piece")
+        dialog.transient(self.root)
+        dialog.grab_set()  # Make dialog modal
+        
         selected_piece = tk.StringVar(value='Queen')
+        result = [chess.QUEEN]  # Default to Queen
+        
+        def on_ok():
+            result[0] = pieces[selected_piece.get()]
+            dialog.destroy()
         
         for piece_name in pieces.keys():
             tk.Radiobutton(dialog, text=piece_name, 
                           variable=selected_piece, 
                           value=piece_name).pack()
         
-        button = tk.Button(dialog, text="OK", 
-                          command=dialog.quit)
-        button.pack()
+        tk.Button(dialog, text="OK", command=on_ok).pack()
         
-        dialog.mainloop()
-        piece_type = pieces[selected_piece.get()]
-        dialog.destroy()
-        return piece_type
+        # Wait for dialog to close
+        self.root.wait_window(dialog)
+        return result[0]
     
     def show_game_over_message(self):
         """Shows game over message with the result"""
@@ -279,7 +295,7 @@ class ChessGUI:
         
         messagebox.showinfo("Game Over", message)
     
-    def make_player_move(self):
+    def make_move_from_text(self):
         """Processes moves entered via text input"""
         move_uci = self.move_entry.get().strip()
         try:
@@ -292,15 +308,6 @@ class ChessGUI:
         except ValueError:
             messagebox.showerror("Error", "Invalid move format!")
     
-    def make_ai_move(self):
-        """Executes the AI's move"""
-        if not self.board.is_game_over():
-            ai_move = self.ai.get_best_move(self.board, time_limit=1.0)
-            if ai_move:
-                self.board.push(ai_move)
-                self.update_display()
-                self.history_text.insert(tk.END, f"{len(self.board.move_stack)}. {ai_move.uci()}\n")
-    
     def new_game(self):
         """Resets the game to initial state"""
         self.board = chess.Board()
@@ -308,24 +315,25 @@ class ChessGUI:
         self.update_display()
 
     def choose_player_color(self):
-        """Displays color selection dialog"""
-        popup = tk.Toplevel(self.root)
-        popup.title("Choose Color")
-        popup.geometry("300x150")
-        popup.transient(self.root)
+        """Let player choose their color"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Choose Your Color")
+        dialog.transient(self.root)
+        dialog.grab_set()
         
-        result = [None]
+        color = [None]  # Use list to store color choice
         
-        def set_color(color):
-            result[0] = color
-            popup.destroy()
+        def set_color(is_white):
+            color[0] = chess.WHITE if is_white else chess.BLACK
+            dialog.destroy()
         
-        tk.Label(popup, text="Choose your color:", font=('Arial', 14)).pack(pady=10)
-        tk.Button(popup, text="White", command=lambda: set_color(chess.WHITE)).pack(pady=5)
-        tk.Button(popup, text="Black", command=lambda: set_color(chess.BLACK)).pack(pady=5)
+        tk.Button(dialog, text="White", 
+                 command=lambda: set_color(True)).pack(side=tk.LEFT, padx=10)
+        tk.Button(dialog, text="Black", 
+                 command=lambda: set_color(False)).pack(side=tk.RIGHT, padx=10)
         
-        self.root.wait_window(popup)
-        return result[0]
+        self.root.wait_window(dialog)
+        return color[0] or chess.WHITE  # Default to white if dialog is closed
 
 def main():
     # Create necessary directories
