@@ -1,15 +1,31 @@
+"""
+Chess GUI implementation using tkinter.
+Provides a graphical interface for playing chess against the AI.
+"""
+
 import tkinter as tk
 from tkinter import messagebox
 import chess
 from PIL import Image, ImageTk
-from chess_ai import ChessAI
+from src.chess_ai.chess_ai import ModernChessAI
+from src.chess_ai.config import Config
 
 class ChessGUI:
+    """
+    A graphical user interface for the chess game.
+    
+    Attributes:
+        root (tk.Tk): The main window of the application
+        board (chess.Board): The chess board state
+        ai (ModernChessAI): The AI opponent
+        selected_square (int): Currently selected square on the board
+        player_color (bool): Color of the human player (True for white)
+    """
     def __init__(self, root):
         self.root = root
         self.root.title("Chess Game")
         self.board = chess.Board()
-        self.ai = ChessAI()
+        self.ai = ModernChessAI(use_mcts=True, use_rl=True)
         
         # Initialize GUI components
         self.main_frame = tk.Frame(self.root)
@@ -121,7 +137,20 @@ class ChessGUI:
     
     def handle_move(self, start_square, end_square):
         """Processes a move and triggers AI response"""
-        move = chess.Move(start_square, end_square)
+        # Check if this is a pawn promotion move
+        piece = self.board.piece_at(start_square)
+        is_promotion = (piece is not None and 
+                       piece.piece_type == chess.PAWN and 
+                       ((end_square >= 56 and piece.color) or  # White pawn reaching 8th rank
+                        (end_square <= 7 and not piece.color)))  # Black pawn reaching 1st rank
+        
+        if is_promotion:
+            # Create promotion dialog
+            promotion_piece = self.show_promotion_dialog()
+            move = chess.Move(start_square, end_square, promotion=promotion_piece)
+        else:
+            move = chess.Move(start_square, end_square)
+
         if move in self.board.legal_moves:
             self.board.push(move)
             self.update_display()
@@ -129,6 +158,33 @@ class ChessGUI:
             
             if not self.board.is_game_over():
                 self.make_ai_move()
+    
+    def show_promotion_dialog(self):
+        """Shows a dialog for selecting promotion piece"""
+        pieces = {
+            'Queen': chess.QUEEN,
+            'Rook': chess.ROOK,
+            'Bishop': chess.BISHOP,
+            'Knight': chess.KNIGHT
+        }
+        
+        dialog = tk.Toplevel()
+        dialog.title("Choose promotion piece")
+        selected_piece = tk.StringVar(value='Queen')
+        
+        for piece_name in pieces.keys():
+            tk.Radiobutton(dialog, text=piece_name, 
+                          variable=selected_piece, 
+                          value=piece_name).pack()
+        
+        button = tk.Button(dialog, text="OK", 
+                          command=dialog.quit)
+        button.pack()
+        
+        dialog.mainloop()
+        piece_type = pieces[selected_piece.get()]
+        dialog.destroy()
+        return piece_type
     
     def make_player_move(self):
         """Processes moves entered via text input"""
@@ -146,7 +202,7 @@ class ChessGUI:
     def make_ai_move(self):
         """Executes the AI's move"""
         if not self.board.is_game_over():
-            ai_move = self.ai.get_best_move(self.board)
+            ai_move = self.ai.get_best_move(self.board, time_limit=1.0)
             if ai_move:
                 self.board.push(ai_move)
                 self.update_display()
@@ -179,6 +235,10 @@ class ChessGUI:
         return result[0]
 
 def main():
+    # Create necessary directories
+    Config.create_directories()
+    
+    # Initialize GUI
     root = tk.Tk()
     app = ChessGUI(root)
     root.mainloop()
