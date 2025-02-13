@@ -27,7 +27,7 @@ A production-ready chess AI training system using Reinforcement Learning (RL) an
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/yourusername/chess-ai-project.git
+   git clone https://github.com/abhilashreddychitiki/chess-ai.git
    cd chess-ai-project
    ```
 2. **Create a Virtual Environment**
